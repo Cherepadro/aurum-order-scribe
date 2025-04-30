@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -19,40 +19,27 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Edit, Check, Filter } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from '@/hooks/use-toast';
 
-// Mock data (will be replaced with Supabase data later)
-const mockOrders = [
-  {
-    id: 1,
-    date: '10.05.2025',
-    workshop: 'ул. Ленина, 10',
-    client: 'Иванов И.И.',
-    phone: '+7 (999) 123-45-67',
-    priority: 'standard',
-    status: 'new',
-    price: '5000',
-  },
-  {
-    id: 2,
-    date: '11.05.2025',
-    workshop: 'ул. Пушкина, 15',
-    client: 'Петрова М.С.',
-    phone: '+7 (999) 765-43-21',
-    priority: 'urgent',
-    status: 'in_progress',
-    price: '8000',
-  },
-  {
-    id: 3,
-    date: '12.05.2025',
-    workshop: 'пр. Мира, 25',
-    client: 'Сидоров А.П.',
-    phone: '+7 (999) 111-22-33',
-    priority: 'non-urgent',
-    status: 'completed',
-    price: '3500',
-  },
-];
+type OrderType = {
+  id: number;
+  date: string;
+  workshop: {
+    address: string;
+    id: string;
+  };
+  employee: {
+    name: string;
+    id: string;
+  };
+  client_name: string;
+  client_phone: string;
+  priority: string;
+  status: string;
+  price: string;
+};
 
 const getStatusColor = (status: string, priority: string) => {
   if (status === 'new') {
@@ -90,43 +77,166 @@ const getPriorityText = (priority: string) => {
 };
 
 const OrderTable = () => {
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const [selectedStatus, setSelectedStatus] = React.useState('');
-  const [selectedPriority, setSelectedPriority] = React.useState('');
-  const [selectedOrder, setSelectedOrder] = React.useState<number | null>(null);
+  const { employeeId } = useAuth();
+  const [orders, setOrders] = useState<OrderType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedPriority, setSelectedPriority] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
+
+  // Fetch orders from Supabase
+  const fetchOrders = async () => {
+    setIsLoading(true);
+    
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        id, 
+        date, 
+        priority,
+        status,
+        client_name,
+        client_phone,
+        price,
+        workshop:workshop_id (id, address),
+        employee:employee_id (id, name)
+      `)
+      .order('id', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching orders:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось загрузить список заказов",
+        variant: "destructive",
+      });
+    } else {
+      setOrders(data || []);
+    }
+    
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    fetchOrders();
+
+    // Set up real-time subscription for orders
+    const subscription = supabase
+      .channel('table:orders')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'orders' }, 
+        () => {
+          fetchOrders();
+        })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const handleOrderClick = (orderId: number) => {
     setSelectedOrder(selectedOrder === orderId ? null : orderId);
   };
 
-  const handleEdit = (orderId: number) => {
-    // Navigate to edit page or open modal
-    console.log('Edit order:', orderId);
+  const handleComplete = async (orderId: number) => {
+    try {
+      // Update the order status
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'completed' })
+        .eq('id', orderId);
+
+      if (updateError) throw updateError;
+
+      // Update the log entry with completion info
+      const now = new Date().toISOString();
+      const { error: logError } = await supabase
+        .from('order_logs')
+        .update({
+          completed_by: employeeId,
+          completion_date: now
+        })
+        .eq('order_id', orderId);
+
+      if (logError) throw logError;
+
+      toast({
+        title: "Готово",
+        description: `Заказ #${orderId} отмечен как выполненный`,
+      });
+
+      // Refresh the orders list
+      fetchOrders();
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить статус заказа",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleComplete = (orderId: number) => {
-    // Mark as completed
-    console.log('Complete order:', orderId);
+  const handleIssue = async (orderId: number) => {
+    try {
+      // Update the order status
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'issued' })
+        .eq('id', orderId);
+
+      if (updateError) throw updateError;
+
+      // Update the log entry with issuance info
+      const now = new Date().toISOString();
+      const { error: logError } = await supabase
+        .from('order_logs')
+        .update({
+          issued_by: employeeId,
+          issue_date: now
+        })
+        .eq('order_id', orderId);
+
+      if (logError) throw logError;
+
+      toast({
+        title: "Выдано",
+        description: `Заказ #${orderId} отмечен как выданный клиенту`,
+      });
+
+      // Refresh the orders list
+      fetchOrders();
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить статус заказа",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleIssue = (orderId: number) => {
-    // Mark as issued
-    console.log('Issue order:', orderId);
-  };
-
-  const filteredOrders = mockOrders.filter((order) => {
+  const filteredOrders = orders.filter((order) => {
     const matchesSearch = 
       order.id.toString().includes(searchTerm) ||
-      order.date.includes(searchTerm) ||
-      order.workshop.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.client.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.phone.includes(searchTerm);
+      (order.date && order.date.includes(searchTerm)) ||
+      (order.workshop?.address && order.workshop.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (order.client_name && order.client_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (order.client_phone && order.client_phone.includes(searchTerm));
       
     const matchesStatus = !selectedStatus || order.status === selectedStatus;
     const matchesPriority = !selectedPriority || order.priority === selectedPriority;
     
     return matchesSearch && matchesStatus && matchesPriority;
   });
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU');
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 animate-fade-in">
@@ -193,7 +303,13 @@ const OrderTable = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredOrders.length > 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-jewelry-silver">
+                      Загрузка...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredOrders.length > 0 ? (
                   filteredOrders.map((order) => (
                     <React.Fragment key={order.id}>
                       <TableRow
@@ -203,13 +319,13 @@ const OrderTable = () => {
                         onClick={() => handleOrderClick(order.id)}
                       >
                         <TableCell className="font-medium">{order.id}</TableCell>
-                        <TableCell>{order.date}</TableCell>
-                        <TableCell>{order.workshop}</TableCell>
-                        <TableCell>{order.client}</TableCell>
-                        <TableCell>{order.phone}</TableCell>
+                        <TableCell>{formatDate(order.date)}</TableCell>
+                        <TableCell>{order.workshop?.address || ''}</TableCell>
+                        <TableCell>{order.client_name}</TableCell>
+                        <TableCell>{order.client_phone}</TableCell>
                         <TableCell>{getPriorityText(order.priority)}</TableCell>
                         <TableCell>{getStatusText(order.status)}</TableCell>
-                        <TableCell className="text-right">{`${order.price} ₽`}</TableCell>
+                        <TableCell className="text-right">{order.price ? `${order.price} ₽` : ''}</TableCell>
                       </TableRow>
                       {selectedOrder === order.id && (
                         <TableRow className="bg-muted/10 border-0">
@@ -217,7 +333,13 @@ const OrderTable = () => {
                             <div className="flex justify-end gap-2">
                               <Button
                                 size="sm"
-                                onClick={() => handleEdit(order.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Will implement edit functionality later
+                                  toast({
+                                    description: "Функция редактирования будет доступна в следующей версии"
+                                  });
+                                }}
                                 className="jewelry-btn-outline flex items-center gap-1"
                               >
                                 <Edit className="h-4 w-4" />
@@ -225,7 +347,10 @@ const OrderTable = () => {
                               </Button>
                               <Button
                                 size="sm"
-                                onClick={() => handleComplete(order.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleComplete(order.id);
+                                }}
                                 className="jewelry-btn-outline flex items-center gap-1"
                                 disabled={order.status === 'completed' || order.status === 'issued'}
                               >
@@ -234,7 +359,10 @@ const OrderTable = () => {
                               </Button>
                               <Button
                                 size="sm"
-                                onClick={() => handleIssue(order.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleIssue(order.id);
+                                }}
                                 className="jewelry-btn flex items-center gap-1"
                                 disabled={order.status !== 'completed'}
                               >

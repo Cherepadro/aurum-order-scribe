@@ -5,35 +5,26 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { supabase } from "@/integrations/supabase/client";
 
 type Employee = {
-  id: number;
+  id: string;
   name: string;
 };
 
 type Workshop = {
-  id: number;
+  id: string;
   address: string;
 };
 
-// Mock data (will be replaced with Supabase data later)
-const mockEmployees: Employee[] = [
-  { id: 1, name: 'Иван Петров' },
-  { id: 2, name: 'Мария Смирнова' },
-  { id: 3, name: 'Алексей Иванов' }
-];
-
-const mockWorkshops: Workshop[] = [
-  { id: 1, address: 'ул. Ленина, 10' },
-  { id: 2, address: 'ул. Пушкина, 15' },
-  { id: 3, address: 'пр. Мира, 25' }
-];
-
 const AuthPage = () => {
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
-  const [workshops, setWorkshops] = useState<Workshop[]>(mockWorkshops);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [selectedWorkshop, setSelectedWorkshop] = useState<string>('');
+  const [selectedWorkshopId, setSelectedWorkshopId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
   const { setAuth, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
@@ -44,14 +35,58 @@ const AuthPage = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // Later this will be connected to Supabase
-  // const fetchEmployeesAndWorkshops = async () => {
-  //   // Fetch from Supabase
-  // };
+  // Fetch employees and workshops from Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      
+      // Fetch workshops
+      const { data: workshopsData, error: workshopsError } = await supabase
+        .from('workshops')
+        .select('id, address');
+
+      if (workshopsError) {
+        console.error('Error fetching workshops:', workshopsError);
+      } else {
+        setWorkshops(workshopsData || []);
+      }
+
+      // Fetch employees
+      const { data: employeesData, error: employeesError } = await supabase
+        .from('employees')
+        .select('id, name');
+
+      if (employeesError) {
+        console.error('Error fetching employees:', employeesError);
+      } else {
+        setEmployees(employeesData || []);
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, []);
+
+  const handleEmployeeChange = (value: string) => {
+    const employee = employees.find(emp => emp.id === value);
+    if (employee) {
+      setSelectedEmployee(employee.name);
+      setSelectedEmployeeId(employee.id);
+    }
+  };
+
+  const handleWorkshopChange = (value: string) => {
+    const workshop = workshops.find(ws => ws.id === value);
+    if (workshop) {
+      setSelectedWorkshop(workshop.address);
+      setSelectedWorkshopId(workshop.id);
+    }
+  };
 
   const handleLogin = () => {
     if (selectedEmployee && selectedWorkshop) {
-      setAuth(selectedEmployee, selectedWorkshop);
+      setAuth(selectedEmployee, selectedWorkshop, selectedEmployeeId, selectedWorkshopId);
       navigate('/order');
     }
   };
@@ -68,13 +103,13 @@ const AuthPage = () => {
             <label htmlFor="employee" className="block text-sm font-medium">
               Сотрудник
             </label>
-            <Select onValueChange={setSelectedEmployee} value={selectedEmployee}>
+            <Select onValueChange={handleEmployeeChange}>
               <SelectTrigger className="jewelry-input w-full">
                 <SelectValue placeholder="Выберите сотрудника" />
               </SelectTrigger>
               <SelectContent className="bg-jewelry-dark border-border text-foreground">
                 {employees.map(employee => (
-                  <SelectItem key={employee.id} value={employee.name}>
+                  <SelectItem key={employee.id} value={employee.id}>
                     {employee.name}
                   </SelectItem>
                 ))}
@@ -86,13 +121,13 @@ const AuthPage = () => {
             <label htmlFor="workshop" className="block text-sm font-medium">
               Мастерская
             </label>
-            <Select onValueChange={setSelectedWorkshop} value={selectedWorkshop}>
+            <Select onValueChange={handleWorkshopChange}>
               <SelectTrigger className="jewelry-input w-full">
                 <SelectValue placeholder="Выберите адрес мастерской" />
               </SelectTrigger>
               <SelectContent className="bg-jewelry-dark border-border text-foreground">
                 {workshops.map(workshop => (
-                  <SelectItem key={workshop.id} value={workshop.address}>
+                  <SelectItem key={workshop.id} value={workshop.id}>
                     {workshop.address}
                   </SelectItem>
                 ))}
@@ -108,9 +143,9 @@ const AuthPage = () => {
                 : 'bg-muted text-muted-foreground cursor-not-allowed'
             }`}
             onClick={handleLogin}
-            disabled={!selectedEmployee || !selectedWorkshop}
+            disabled={!selectedEmployee || !selectedWorkshop || isLoading}
           >
-            Войти
+            {isLoading ? 'Загрузка...' : 'Войти'}
           </Button>
         </CardFooter>
       </Card>

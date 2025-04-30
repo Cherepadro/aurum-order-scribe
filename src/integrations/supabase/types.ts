@@ -9,7 +9,232 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      employees: {
+        Row: {
+          id: string
+          name: string
+          phone: string | null
+          workshop_id: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          phone?: string | null
+          workshop_id?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          phone?: string | null
+          workshop_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employees_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_logs: {
+        Row: {
+          accepted_by: string | null
+          completed_by: string | null
+          completion_date: string | null
+          issue_date: string | null
+          issued_by: string | null
+          order_date: string | null
+          order_id: number
+        }
+        Insert: {
+          accepted_by?: string | null
+          completed_by?: string | null
+          completion_date?: string | null
+          issue_date?: string | null
+          issued_by?: string | null
+          order_date?: string | null
+          order_id: number
+        }
+        Update: {
+          accepted_by?: string | null
+          completed_by?: string | null
+          completion_date?: string | null
+          issue_date?: string | null
+          issued_by?: string | null
+          order_date?: string | null
+          order_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_logs_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_logs_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_logs_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_logs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          client_name: string
+          client_phone: string | null
+          date: string | null
+          employee_id: string | null
+          id: number
+          notes: string | null
+          photos_path: string | null
+          price: string | null
+          priority: string | null
+          services: Json | null
+          status: string | null
+          workshop_id: string | null
+        }
+        Insert: {
+          client_name: string
+          client_phone?: string | null
+          date?: string | null
+          employee_id?: string | null
+          id?: number
+          notes?: string | null
+          photos_path?: string | null
+          price?: string | null
+          priority?: string | null
+          services?: Json | null
+          status?: string | null
+          workshop_id?: string | null
+        }
+        Update: {
+          client_name?: string
+          client_phone?: string | null
+          date?: string | null
+          employee_id?: string | null
+          id?: number
+          notes?: string | null
+          photos_path?: string | null
+          price?: string | null
+          priority?: string | null
+          services?: Json | null
+          status?: string | null
+          workshop_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_workshop_id_fkey"
+            columns: ["workshop_id"]
+            isOneToOne: false
+            referencedRelation: "workshops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_services: {
+        Row: {
+          product_id: string
+          service_id: string
+        }
+        Insert: {
+          product_id: string
+          service_id: string
+        }
+        Update: {
+          product_id?: string
+          service_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_services_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      services: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      workshops: {
+        Row: {
+          address: string
+          id: string
+          phone: string | null
+        }
+        Insert: {
+          address: string
+          id?: string
+          phone?: string | null
+        }
+        Update: {
+          address?: string
+          id?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

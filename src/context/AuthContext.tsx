@@ -1,40 +1,65 @@
 
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
 
-type AuthContextType = {
+interface AuthContextType {
   employeeName: string | null;
   workshopAddress: string | null;
-  setAuth: (employee: string | null, workshop: string | null) => void;
+  employeeId: string | null;
+  workshopId: string | null;
   isAuthenticated: boolean;
-  logout: () => void;
-};
+  setAuth: (employeeName: string, workshopAddress: string, employeeId: string, workshopId: string) => void;
+  clearAuth: () => void;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [employeeName, setEmployeeName] = useState<string | null>(
-    sessionStorage.getItem('employeeName')
-  );
-  const [workshopAddress, setWorkshopAddress] = useState<string | null>(
-    sessionStorage.getItem('workshopAddress')
-  );
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [employeeName, setEmployeeName] = useState<string | null>(null);
+  const [workshopAddress, setWorkshopAddress] = useState<string | null>(null);
+  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const [workshopId, setWorkshopId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
-  const setAuth = (employee: string | null, workshop: string | null) => {
-    if (employee) {
-      sessionStorage.setItem('employeeName', employee);
-      setEmployeeName(employee);
+  // Initialize from localStorage
+  useEffect(() => {
+    const storedEmployeeName = localStorage.getItem("employeeName");
+    const storedWorkshopAddress = localStorage.getItem("workshopAddress");
+    const storedEmployeeId = localStorage.getItem("employeeId");
+    const storedWorkshopId = localStorage.getItem("workshopId");
+
+    if (storedEmployeeName && storedWorkshopAddress && storedEmployeeId && storedWorkshopId) {
+      setEmployeeName(storedEmployeeName);
+      setWorkshopAddress(storedWorkshopAddress);
+      setEmployeeId(storedEmployeeId);
+      setWorkshopId(storedWorkshopId);
+      setIsAuthenticated(true);
     }
-    if (workshop) {
-      sessionStorage.setItem('workshopAddress', workshop);
-      setWorkshopAddress(workshop);
-    }
+  }, []);
+
+  const setAuth = (name: string, address: string, eId: string, wId: string) => {
+    setEmployeeName(name);
+    setWorkshopAddress(address);
+    setEmployeeId(eId);
+    setWorkshopId(wId);
+    setIsAuthenticated(true);
+    
+    localStorage.setItem("employeeName", name);
+    localStorage.setItem("workshopAddress", address);
+    localStorage.setItem("employeeId", eId);
+    localStorage.setItem("workshopId", wId);
   };
 
-  const logout = () => {
-    sessionStorage.removeItem('employeeName');
-    sessionStorage.removeItem('workshopAddress');
+  const clearAuth = () => {
     setEmployeeName(null);
     setWorkshopAddress(null);
+    setEmployeeId(null);
+    setWorkshopId(null);
+    setIsAuthenticated(false);
+    
+    localStorage.removeItem("employeeName");
+    localStorage.removeItem("workshopAddress");
+    localStorage.removeItem("employeeId");
+    localStorage.removeItem("workshopId");
   };
 
   return (
@@ -42,20 +67,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         employeeName,
         workshopAddress,
+        employeeId,
+        workshopId,
+        isAuthenticated,
         setAuth,
-        isAuthenticated: !!(employeeName && workshopAddress),
-        logout,
+        clearAuth,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
-}
+};
 
-export function useAuth() {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-}
+};

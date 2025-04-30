@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -11,47 +11,95 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Package, Printer, Save } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
-// Mock data (will be replaced with Supabase data later)
-const mockLogs = [
-  {
-    orderId: 1,
-    orderDate: '10.05.2025',
-    acceptedBy: 'Иван Петров',
-    completedBy: 'Мария Смирнова',
-    completionDate: '15.05.2025',
-    issuedBy: 'Иван Петров',
-    issueDate: '16.05.2025',
-  },
-  {
-    orderId: 2,
-    orderDate: '11.05.2025',
-    acceptedBy: 'Мария Смирнова',
-    completedBy: 'Алексей Иванов',
-    completionDate: '17.05.2025',
-    issuedBy: null,
-    issueDate: null,
-  },
-  {
-    orderId: 3,
-    orderDate: '12.05.2025',
-    acceptedBy: 'Алексей Иванов',
-    completedBy: null,
-    completionDate: null,
-    issuedBy: null,
-    issueDate: null,
-  },
-];
+type LogEntry = {
+  order_id: number;
+  order_date: string;
+  accepted_by: {
+    name: string;
+  };
+  completed_by: {
+    name: string;
+  } | null;
+  completion_date: string | null;
+  issued_by: {
+    name: string;
+  } | null;
+  issue_date: string | null;
+};
 
 const ReportsPage = () => {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('order_logs')
+        .select(`
+          order_id,
+          order_date,
+          accepted_by:accepted_by(name),
+          completed_by:completed_by(name),
+          completion_date,
+          issued_by:issued_by(name),
+          issue_date
+        `)
+        .order('order_date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching logs:', error);
+        toast({
+          title: "Ошибка",
+          description: "Не удалось загрузить данные отчетов",
+          variant: "destructive",
+        });
+      } else {
+        setLogs(data || []);
+      }
+      
+      setIsLoading(false);
+    };
+
+    fetchLogs();
+
+    // Set up real-time subscription for logs
+    const subscription = supabase
+      .channel('table:order_logs')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'order_logs' }, 
+        () => {
+          fetchLogs();
+        })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU');
+  };
+
   const handleExportExcel = () => {
     // Will implement Excel export
-    console.log('Exporting to Excel');
+    toast({
+      description: "Функция экспорта в Excel будет доступна в следующей версии"
+    });
   };
 
   const handleExportPDF = () => {
     // Will implement PDF export
-    console.log('Exporting to PDF');
+    toast({
+      description: "Функция экспорта в PDF будет доступна в следующей версии"
+    });
   };
 
   return (
@@ -91,21 +139,28 @@ const ReportsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockLogs.map((log) => (
-                  <TableRow key={log.orderId} className="hover:bg-muted/10">
-                    <TableCell className="flex items-center gap-2">
-                      <Package className="h-4 w-4 text-jewelry-gold" />
-                      {log.orderId}
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-jewelry-silver">
+                      Загрузка...
                     </TableCell>
-                    <TableCell>{log.orderDate}</TableCell>
-                    <TableCell>{log.acceptedBy}</TableCell>
-                    <TableCell>{log.completedBy || '—'}</TableCell>
-                    <TableCell>{log.completionDate || '—'}</TableCell>
-                    <TableCell>{log.issuedBy || '—'}</TableCell>
-                    <TableCell>{log.issueDate || '—'}</TableCell>
                   </TableRow>
-                ))}
-                {mockLogs.length === 0 && (
+                ) : logs.length > 0 ? (
+                  logs.map((log) => (
+                    <TableRow key={log.order_id} className="hover:bg-muted/10">
+                      <TableCell className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-jewelry-gold" />
+                        {log.order_id}
+                      </TableCell>
+                      <TableCell>{formatDate(log.order_date)}</TableCell>
+                      <TableCell>{log.accepted_by?.name || '—'}</TableCell>
+                      <TableCell>{log.completed_by?.name || '—'}</TableCell>
+                      <TableCell>{formatDate(log.completion_date)}</TableCell>
+                      <TableCell>{log.issued_by?.name || '—'}</TableCell>
+                      <TableCell>{formatDate(log.issue_date)}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-jewelry-silver">
                       Записи не найдены

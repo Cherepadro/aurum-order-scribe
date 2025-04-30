@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,32 +28,28 @@ import {
 } from "@/components/ui/card";
 import { CalendarIcon, Save, Plus, Printer } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock data (will be replaced with Supabase data later)
-const mockProducts = [
-  { id: 1, name: "Кольцо" },
-  { id: 2, name: "Цепочка" },
-  { id: 3, name: "Браслет" },
-  { id: 4, name: "Серьги" },
-  { id: 5, name: "Другое" },
-];
+type Product = {
+  id: string;
+  name: string;
+};
 
-const mockServices = [
-  { id: 1, name: "Ремонт" },
-  { id: 2, name: "Чистка" },
-  { id: 3, name: "Гравировка" },
-  { id: 4, name: "Полировка" },
-  { id: 5, name: "Изменение размера" },
-  { id: 6, name: "Другое" },
-];
+type Service = {
+  id: string;
+  name: string;
+};
 
 type ProductItem = {
   id: number;
   product: string;
+  product_id: string;
   customProduct?: string;
   weight: string;
   services: {
     id: number;
+    service_id: string;
     name: string;
     isCustom: boolean;
     customService?: string;
@@ -61,7 +57,7 @@ type ProductItem = {
 };
 
 const OrderForm = () => {
-  const { employeeName, workshopAddress } = useAuth();
+  const { employeeName, workshopAddress, employeeId, workshopId } = useAuth();
   const [date, setDate] = useState<Date>(new Date());
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -72,10 +68,49 @@ const OrderForm = () => {
     {
       id: 1,
       product: "",
+      product_id: "",
       weight: "",
       services: [],
     },
   ]);
+  
+  // State for products and services from Supabase
+  const [productOptions, setProductOptions] = useState<Product[]>([]);
+  const [serviceOptions, setServiceOptions] = useState<Service[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch products and services from Supabase
+  useEffect(() => {
+    const fetchProductsAndServices = async () => {
+      setIsLoading(true);
+      
+      // Fetch products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name');
+
+      if (productsError) {
+        console.error('Error fetching products:', productsError);
+      } else {
+        setProductOptions(productsData || []);
+      }
+
+      // Fetch services
+      const { data: servicesData, error: servicesError } = await supabase
+        .from('services')
+        .select('id, name');
+
+      if (servicesError) {
+        console.error('Error fetching services:', servicesError);
+      } else {
+        setServiceOptions(servicesData || []);
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchProductsAndServices();
+  }, []);
 
   const handleReset = () => {
     setClientName("");
@@ -83,10 +118,12 @@ const OrderForm = () => {
     setPrice("");
     setNotes("");
     setPriority("standard");
+    setDate(new Date());
     setProducts([
       {
         id: 1,
         product: "",
+        product_id: "",
         weight: "",
         services: [],
       },
@@ -95,14 +132,31 @@ const OrderForm = () => {
 
   const handleProductChange = (
     productId: number,
-    field: keyof ProductItem,
+    field: "product" | "weight",
     value: string
   ) => {
     setProducts(
       products.map((p) => {
         if (p.id === productId) {
-          if (field === "product" && value === "Другое") {
-            return { ...p, [field]: value, customProduct: "", services: [] };
+          if (field === "product") {
+            const selectedProduct = productOptions.find(po => po.id === value);
+            const productName = selectedProduct ? selectedProduct.name : "";
+            
+            if (productName === "Другое") {
+              return { 
+                ...p, 
+                product_id: value,
+                product: productName, 
+                customProduct: "", 
+                services: [] 
+              };
+            }
+            
+            return { 
+              ...p, 
+              product_id: value,
+              product: productName
+            };
           }
           return { ...p, [field]: value };
         }
@@ -135,6 +189,7 @@ const OrderForm = () => {
                 ...p.services,
                 {
                   id: p.services.length + 1,
+                  service_id: "",
                   name: "",
                   isCustom: false,
                 },
@@ -159,15 +214,25 @@ const OrderForm = () => {
             ...p,
             services: p.services.map((s) => {
               if (s.id === serviceId) {
-                if (value === "Другое") {
+                const selectedService = serviceOptions.find(so => so.id === value);
+                const serviceName = selectedService ? selectedService.name : "";
+                
+                if (serviceName === "Другое") {
                   return {
                     ...s,
-                    name: value,
+                    service_id: value,
+                    name: serviceName,
                     isCustom: true,
                     customService: "",
                   };
                 }
-                return { ...s, name: value, isCustom: false };
+                
+                return { 
+                  ...s, 
+                  service_id: value,
+                  name: serviceName, 
+                  isCustom: false 
+                };
               }
               return s;
             }),
@@ -208,6 +273,7 @@ const OrderForm = () => {
         {
           id: products.length + 1,
           product: "",
+          product_id: "",
           weight: "",
           services: [],
         },
@@ -215,24 +281,120 @@ const OrderForm = () => {
     }
   };
 
-  const handleSaveOrder = () => {
-    // Will be implemented with Supabase
-    console.log({
-      date,
-      employeeName,
-      workshopAddress,
-      clientName,
-      clientPhone,
-      products,
-      notes,
-      price,
-      priority,
+  const handleSaveOrder = async () => {
+    if (!clientName.trim()) {
+      toast({
+        title: "Ошибка",
+        description: "Укажите имя клиента",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!products[0].product) {
+      toast({
+        title: "Ошибка",
+        description: "Добавьте хотя бы одно изделие",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Format services data for JSON storage
+    const servicesData = products.filter(p => p.product).map(product => {
+      const servicesList = product.services.map(service => {
+        if (service.isCustom && service.customService) {
+          return service.customService;
+        }
+        return service.name;
+      }).filter(Boolean);
+
+      return {
+        product: product.product === "Другое" && product.customProduct 
+          ? product.customProduct 
+          : product.product,
+        weight: product.weight,
+        services: servicesList
+      };
     });
+
+    try {
+      // Insert the order into Supabase
+      const { data, error } = await supabase
+        .from('orders')
+        .insert({
+          date: date.toISOString(),
+          workshop_id: workshopId,
+          employee_id: employeeId,
+          client_name: clientName,
+          client_phone: clientPhone,
+          priority: priority,
+          status: 'new',
+          services: servicesData,
+          notes: notes,
+          price: price,
+          // photos_path will be added once file uploads are implemented
+        })
+        .select();
+
+      if (error) {
+        console.error('Error saving order:', error);
+        toast({
+          title: "Ошибка",
+          description: "Не удалось сохранить заказ",
+          variant: "destructive",
+        });
+      } else {
+        // Create order log entry
+        if (data && data.length > 0) {
+          const orderId = data[0].id;
+          
+          const { error: logError } = await supabase
+            .from('order_logs')
+            .insert({
+              order_id: orderId,
+              order_date: date.toISOString(),
+              accepted_by: employeeId,
+              // completed_by and issued_by will be null initially
+            });
+            
+          if (logError) {
+            console.error('Error creating log entry:', logError);
+          }
+          
+          toast({
+            title: "Успех",
+            description: `Заказ #${orderId} успешно сохранен`,
+          });
+          
+          // Reset the form after successful save
+          handleReset();
+        }
+      }
+    } catch (err) {
+      console.error('Error in save process:', err);
+      toast({
+        title: "Ошибка",
+        description: "Произошла ошибка при сохранении",
+        variant: "destructive",
+      });
+    }
   };
 
   const handlePrintOrder = () => {
     // Will be implemented with PDF generation
-    console.log("Printing order...");
+    toast({
+      title: "Информация",
+      description: "Функция печати будет доступна в следующей версии",
+    });
+  };
+
+  const getOtherProductId = () => {
+    return productOptions.find(p => p.name === "Другое")?.id || "";
+  };
+
+  const getOtherServiceId = () => {
+    return serviceOptions.find(s => s.name === "Другое")?.id || "";
   };
 
   return (
@@ -378,16 +540,6 @@ const OrderForm = () => {
                 placeholder="₽"
               />
             </div>
-
-            <div className="space-y-2">
-              <Label>Дополнительная информация</Label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="jewelry-input min-h-[80px]"
-                placeholder="Комментарии к заказу"
-              />
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -415,23 +567,29 @@ const OrderForm = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Изделие</Label>
-                    <Select
-                      value={product.product}
-                      onValueChange={(value) =>
-                        handleProductChange(product.id, "product", value)
-                      }
-                    >
-                      <SelectTrigger className="jewelry-input">
-                        <SelectValue placeholder="Выберите тип изделия" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-jewelry-dark border-border">
-                        {mockProducts.map((p) => (
-                          <SelectItem key={p.id} value={p.name}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {isLoading ? (
+                      <div className="jewelry-input h-10 flex items-center justify-center">
+                        Загрузка...
+                      </div>
+                    ) : (
+                      <Select
+                        value={product.product_id}
+                        onValueChange={(value) =>
+                          handleProductChange(product.id, "product", value)
+                        }
+                      >
+                        <SelectTrigger className="jewelry-input">
+                          <SelectValue placeholder="Выберите тип изделия" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-jewelry-dark border-border">
+                          {productOptions.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     {product.product === "Другое" && (
                       <Input
                         className="jewelry-input mt-2"
@@ -480,32 +638,38 @@ const OrderForm = () => {
                         key={service.id}
                         className="grid grid-cols-1 md:grid-cols-2 gap-2"
                       >
-                        <Select
-                          value={service.name}
-                          disabled={product.product === "Другое"}
-                          onValueChange={(value) =>
-                            handleServiceChange(
-                              product.id,
-                              service.id,
-                              value
-                            )
-                          }
-                        >
-                          <SelectTrigger className="jewelry-input">
-                            <SelectValue placeholder="Выберите услугу" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-jewelry-dark border-border">
-                            {product.product === "Другое" ? (
-                              <SelectItem value="Другое">Другое</SelectItem>
-                            ) : (
-                              mockServices.map((s) => (
-                                <SelectItem key={s.id} value={s.name}>
-                                  {s.name}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
+                        {isLoading ? (
+                          <div className="jewelry-input h-10 flex items-center justify-center">
+                            Загрузка...
+                          </div>
+                        ) : (
+                          <Select
+                            value={service.service_id}
+                            disabled={product.product === "Другое"}
+                            onValueChange={(value) =>
+                              handleServiceChange(
+                                product.id,
+                                service.id,
+                                value
+                              )
+                            }
+                          >
+                            <SelectTrigger className="jewelry-input">
+                              <SelectValue placeholder="Выберите услугу" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-jewelry-dark border-border">
+                              {product.product === "Другое" ? (
+                                <SelectItem value={getOtherServiceId()}>Другое</SelectItem>
+                              ) : (
+                                serviceOptions.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        )}
                         {service.isCustom && (
                           <Input
                             className="jewelry-input"
@@ -528,6 +692,16 @@ const OrderForm = () => {
                       </div>
                     )}
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Дополнительная информация</Label>
+                  <Textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="jewelry-input min-h-[80px]"
+                    placeholder="Комментарии к заказу"
+                  />
                 </div>
               </CardContent>
             </Card>
