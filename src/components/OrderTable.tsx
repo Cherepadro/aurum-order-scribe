@@ -90,6 +90,7 @@ const OrderTable = () => {
     setIsLoading(true);
     
     const { data, error } = await supabase
+	console.log('orders data:', data);
       .from('orders')
       .select(`
         id, 
