@@ -226,8 +226,8 @@ const OrderTable = () => {
       (order.client_name && order.client_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (order.client_phone && order.client_phone.includes(searchTerm));
       
-    const matchesStatus = !selectedStatus || order.status === selectedStatus;
-    const matchesPriority = !selectedPriority || order.priority === selectedPriority;
+    const matchesStatus = selectedStatus === 'all' || order.status === selectedStatus;
+    const matchesPriority = selectedPriority === 'all' || order.priority === selectedPriority;
     
     return matchesSearch && matchesStatus && matchesPriority;
   });
@@ -263,7 +263,7 @@ const OrderTable = () => {
                   </div>
                 </SelectTrigger>
                 <SelectContent className="bg-jewelry-dark border-border">
-                  <SelectItem value="">Все статусы</SelectItem>
+                  <SelectItem value="all">Все статусы</SelectItem>
                   <SelectItem value="new">Новый</SelectItem>
                   <SelectItem value="in_progress">В работе</SelectItem>
                   <SelectItem value="completed">Готов</SelectItem>
@@ -279,7 +279,7 @@ const OrderTable = () => {
                   </div>
                 </SelectTrigger>
                 <SelectContent className="bg-jewelry-dark border-border">
-                  <SelectItem value="">Все приоритеты</SelectItem>
+                  <SelectItem value="all">Все приоритеты</SelectItem>
                   <SelectItem value="standard">Стандартный</SelectItem>
                   <SelectItem value="urgent">Срочный</SelectItem>
                   <SelectItem value="non-urgent">Не срочный</SelectItem>
