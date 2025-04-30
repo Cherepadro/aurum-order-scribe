@@ -8,7 +8,7 @@ interface AuthContextType {
   workshopId: string | null;
   isAuthenticated: boolean;
   setAuth: (employeeName: string, workshopAddress: string, employeeId: string, workshopId: string) => void;
-  logout: () => void;
+  clearAuth: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem("workshopId", wId);
   };
 
-  const logout = () => {
+  const clearAuth = () => {
     setEmployeeName(null);
     setWorkshopAddress(null);
     setEmployeeId(null);
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         workshopId,
         isAuthenticated,
         setAuth,
-        logout,
+        clearAuth,
       }}
     >
       {children}
