@@ -90,7 +90,6 @@ const OrderTable = () => {
     setIsLoading(true);
     
     const { data, error } = await supabase
-	console.log('orders data:', data);
       .from('orders')
       .select(`
         id, 
@@ -102,7 +101,9 @@ const OrderTable = () => {
         price,
         workshop:workshop_id (id, address),
         employee:employee_id (id, name)
-      `)
+      `);
+	  
+	  console.log('orders data:', data);
       .order('id', { ascending: false });
 
     if (error) {
