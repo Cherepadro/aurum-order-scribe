@@ -89,36 +89,38 @@ const OrderTable = () => {
   const fetchOrders = async () => {
     setIsLoading(true);
     
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`
-        id, 
-        date, 
-        priority,
-        status,
-        client_name,
-        client_phone,
-        price,
-        workshop:workshop_id (id, address),
-        employee:employee_id (id, name)
-      `);
-	  
-	  console.log('orders data:', data);
-      .order('id', { ascending: false });
+const fetchOrders = async () => {
+  setIsLoading(true);
 
-    if (error) {
-      console.error('Error fetching orders:', error);
-      toast({
-        title: "Ошибка",
-        description: "Не удалось загрузить список заказов",
-        variant: "destructive",
-      });
-    } else {
-      setOrders(data || []);
-    }
-    
-    setIsLoading(false);
-  };
+  const { data, error } = await supabase
+    .from('orders')
+    .select(`
+      id, 
+      date, 
+      priority,
+      status,
+      client_name,
+      client_phone,
+      price,
+      workshop:workshop_id (id, address),
+      employee:employee_id (id, name)
+    `);
+
+  console.log('orders data:', data); // ← можно временно оставить
+
+  if (error) {
+    console.error('Error fetching orders:', error);
+    toast({
+      title: "Ошибка",
+      description: "Не удалось загрузить список заказов",
+      variant: "destructive",
+    });
+  } else {
+    setOrders(data || []);
+  }
+
+  setIsLoading(false);
+};
 
   useEffect(() => {
     fetchOrders();
