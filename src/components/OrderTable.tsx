@@ -29,11 +29,11 @@ type OrderType = {
   workshop: {
     address: string;
     id: string;
-  };
+  } | null;
   employee: {
     name: string;
     id: string;
-  };
+  } | null;
   client_name: string;
   client_phone: string;
   priority: string;
@@ -81,46 +81,98 @@ const OrderTable = () => {
   const [orders, setOrders] = useState<OrderType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [selectedPriority, setSelectedPriority] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedPriority, setSelectedPriority] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
 
-  // Fetch orders from Supabase
   const fetchOrders = async () => {
     setIsLoading(true);
     
-const fetchOrders = async () => {
-  setIsLoading(true);
-
-  const { data, error } = await supabase
-    .from('orders')
-    .select(`
-      id, 
-      date, 
-      priority,
-      status,
-      client_name,
-      client_phone,
-      price,
-      workshop:workshop_id (id, address),
-      employee:employee_id (id, name)
-    `);
-
-  console.log('orders data:', data); // ← можно временно оставить
-
-  if (error) {
-    console.error('Error fetching orders:', error);
-    toast({
-      title: "Ошибка",
-      description: "Не удалось загрузить список заказов",
-      variant: "destructive",
-    });
-  } else {
-    setOrders(data || []);
-  }
-
-  setIsLoading(false);
-};
+    try {
+      // First fetch all orders
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          date,
+          workshop_id,
+          employee_id,
+          client_name,
+          client_phone,
+          priority,
+          status,
+          price
+        `);
+      
+      if (ordersError) throw ordersError;
+      
+      if (!ordersData || ordersData.length === 0) {
+        setOrders([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Now fetch workshop and employee data separately and join them
+      const enhancedOrders = await Promise.all(ordersData.map(async (order) => {
+        // Fetch workshop data
+        let workshop = null;
+        if (order.workshop_id) {
+          const { data: workshopData } = await supabase
+            .from('workshops')
+            .select('id, address')
+            .eq('id', order.workshop_id)
+            .single();
+          
+          if (workshopData) {
+            workshop = {
+              id: workshopData.id,
+              address: workshopData.address
+            };
+          }
+        }
+        
+        // Fetch employee data
+        let employee = null;
+        if (order.employee_id) {
+          const { data: employeeData } = await supabase
+            .from('employees')
+            .select('id, name')
+            .eq('id', order.employee_id)
+            .single();
+          
+          if (employeeData) {
+            employee = {
+              id: employeeData.id,
+              name: employeeData.name
+            };
+          }
+        }
+        
+        return {
+          id: order.id,
+          date: order.date,
+          workshop,
+          employee,
+          client_name: order.client_name,
+          client_phone: order.client_phone || '',
+          priority: order.priority || 'standard',
+          status: order.status || 'new',
+          price: order.price || ''
+        };
+      }));
+      
+      setOrders(enhancedOrders);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось загрузить список заказов",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchOrders();

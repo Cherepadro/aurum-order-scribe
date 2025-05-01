@@ -17,16 +17,13 @@ import { toast } from '@/hooks/use-toast';
 type LogEntry = {
   order_id: number;
   order_date: string;
-  accepted_by: {
-    name: string;
-  };
-  completed_by: {
-    name: string;
-  } | null;
+  accepted_by: string;
+  accepted_by_name: string;
+  completed_by: string | null;
+  completed_by_name: string | null;
   completion_date: string | null;
-  issued_by: {
-    name: string;
-  } | null;
+  issued_by: string | null;
+  issued_by_name: string | null;
   issue_date: string | null;
 };
 
@@ -38,31 +35,85 @@ const ReportsPage = () => {
     const fetchLogs = async () => {
       setIsLoading(true);
       
-      const { data, error } = await supabase
-        .from('order_logs')
-        .select(`
-          order_id,
-          order_date,
-          accepted_by:accepted_by(name),
-          completed_by:completed_by(name),
-          completion_date,
-          issued_by:issued_by(name),
-          issue_date
-        `)
-        .order('order_date', { ascending: false });
-
-      if (error) {
+      try {
+        // First get all order logs
+        const { data: orderLogs, error: logsError } = await supabase
+          .from('order_logs')
+          .select('*');
+          
+        if (logsError) throw logsError;
+        
+        if (!orderLogs) {
+          setLogs([]);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Fetch employee details for each log entry
+        const logsWithNames = await Promise.all(
+          orderLogs.map(async (log) => {
+            // Get accepted_by employee name
+            let acceptedByName = 'Неизвестно';
+            if (log.accepted_by) {
+              const { data: acceptedBy } = await supabase
+                .from('employees')
+                .select('name')
+                .eq('id', log.accepted_by)
+                .single();
+              
+              acceptedByName = acceptedBy?.name || 'Неизвестно';
+            }
+            
+            // Get completed_by employee name
+            let completedByName = null;
+            if (log.completed_by) {
+              const { data: completedBy } = await supabase
+                .from('employees')
+                .select('name')
+                .eq('id', log.completed_by)
+                .single();
+              
+              completedByName = completedBy?.name || null;
+            }
+            
+            // Get issued_by employee name
+            let issuedByName = null;
+            if (log.issued_by) {
+              const { data: issuedBy } = await supabase
+                .from('employees')
+                .select('name')
+                .eq('id', log.issued_by)
+                .single();
+              
+              issuedByName = issuedBy?.name || null;
+            }
+            
+            return {
+              order_id: log.order_id,
+              order_date: log.order_date,
+              accepted_by: log.accepted_by,
+              accepted_by_name: acceptedByName,
+              completed_by: log.completed_by,
+              completed_by_name: completedByName,
+              completion_date: log.completion_date,
+              issued_by: log.issued_by,
+              issued_by_name: issuedByName,
+              issue_date: log.issue_date,
+            };
+          })
+        );
+        
+        setLogs(logsWithNames);
+      } catch (error) {
         console.error('Error fetching logs:', error);
         toast({
           title: "Ошибка",
           description: "Не удалось загрузить данные отчетов",
           variant: "destructive",
         });
-      } else {
-        setLogs(data || []);
+      } finally {
+        setIsLoading(false);
       }
-      
-      setIsLoading(false);
     };
 
     fetchLogs();
@@ -153,10 +204,10 @@ const ReportsPage = () => {
                         {log.order_id}
                       </TableCell>
                       <TableCell>{formatDate(log.order_date)}</TableCell>
-                      <TableCell>{log.accepted_by?.name || '—'}</TableCell>
-                      <TableCell>{log.completed_by?.name || '—'}</TableCell>
+                      <TableCell>{log.accepted_by_name}</TableCell>
+                      <TableCell>{log.completed_by_name || '—'}</TableCell>
                       <TableCell>{formatDate(log.completion_date)}</TableCell>
-                      <TableCell>{log.issued_by?.name || '—'}</TableCell>
+                      <TableCell>{log.issued_by_name || '—'}</TableCell>
                       <TableCell>{formatDate(log.issue_date)}</TableCell>
                     </TableRow>
                   ))
